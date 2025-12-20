@@ -1,0 +1,103 @@
+export const sensorLogs = [
+  {
+    timestamp: "2025-10-27T08:41:03.439Z",
+    traffic: {
+      src_ip: "10.20.10.100",
+      src_port: 0,
+      dst_ip: "91.189.91.157",
+      dst_port: 0,
+      proto: "ICMP",
+    },
+    rule: "1:402:16",
+    action: "allow",
+    direction: "C2S",
+    sensor: "snort-client",
+    tactic: "Reconnaissance",
+    confidence: 0.35010752239256515,
+  },
+
+  {
+    timestamp: "2025-10-27T09:06:40.531Z",
+    traffic: {
+      src_ip: "10.20.10.100",
+      src_port: 0,
+      dst_ip: "91.189.91.157",
+      dst_port: 0,
+      proto: "ICMP",
+    },
+    rule: "1:402:16",
+    action: "allow",
+    direction: "C2S",
+    sensor: "snort-client",
+    tactic: "Reconnaissance",
+    confidence: 0.35010752239256515,
+  },
+
+  {
+    timestamp: "2025-10-27T09:06:45.866Z",
+    traffic: {
+      src_ip: "",
+      src_port: 0,
+      dst_ip: "",
+      dst_port: 0,
+      proto: "ARP",
+    },
+    rule: "112:1:1",
+    action: "allow",
+    direction: "UNK",
+    sensor: "snort-client",
+    tactic: "Reconnaissance",
+    confidence: 0.35010752239256515,
+  },
+
+  {
+    timestamp: "2025-10-27T09:19:38.199Z",
+    traffic: {
+      src_ip: "8.8.8.8",
+      src_port: 0,
+      dst_ip: "10.20.10.100",
+      dst_port: 0,
+      proto: "ICMP",
+    },
+    rule: "1:408:8",
+    action: "allow",
+    direction: "S2C",
+    sensor: "snort-client",
+    tactic: "Reconnaissance",
+    confidence: 0.41140731875598824,
+  },
+
+  {
+    timestamp: "2025-10-27T09:19:39.201Z",
+    traffic: {
+      src_ip: "8.8.8.8",
+      src_port: 0,
+      dst_ip: "10.20.10.100",
+      dst_port: 0,
+      proto: "ICMP",
+    },
+    rule: "1:408:8",
+    action: "allow",
+    direction: "S2C",
+    sensor: "snort-client",
+    tactic: "Reconnaissance",
+    confidence: 0.41140731875598824,
+  },
+
+  {
+    timestamp: "2025-10-27T08:41:08.341Z",
+    traffic: {
+      src_ip: "",
+      src_port: 0,
+      dst_ip: "",
+      dst_port: 0,
+      proto: "ARP",
+    },
+    rule: "112:1:1",
+    action: "allow",
+    direction: "UNK",
+    sensor: "snort-client",
+    tactic: "Reconnaissance",
+    confidence: 0.35010752239256515,
+  },
+];

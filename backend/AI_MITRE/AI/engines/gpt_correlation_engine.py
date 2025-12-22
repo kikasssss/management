@@ -1,6 +1,5 @@
 import json
 from typing import Dict, Any, Optional
-
 from AI_MITRE.AI.clients.openai_responses_client import OpenAIResponsesClient
 from AI_MITRE.AI.prompts.gpt_correlation_prompt import CORRELATION_INSTRUCTIONS
 

@@ -1,29 +1,22 @@
 from AI_MITRE.AI.correlation.attack_window_summary import summarize_attack_window
 
-# giả lập window thật của bạn
-WINDOW = {
-    "window_start": "2025-12-11T12:27:26.725000+00:00",
-    "window_end": "2025-12-11T12:27:28.727000+00:00",
-    "actor_ip": "192.168.101.100",
-    "target_ip": "100.100.100.100",
+window = {
+    "window_start": "2025-12-11T12:27:25.724000+00:00",
+    "window_end": "2025-12-11T12:27:30.000000+00:00",
+    "actor_ip": "192.168.114.1",
+    "target_ip": "239.255.255.250",
+    "event_count": 2,
+    "behaviors": ["UPnP discovery scan", "UPnP discovery scan"],
     "sensors": ["snort_dmz"],
-    "behaviors": [
-        "Network discovery",
-        "Network discovery",
-        "Suspicious network activity",
-        "Network discovery",
-        "Suspicious network activity",
-        "Network discovery",
-        "Network discovery",
-        "Suspicious network activity",
-        "Network discovery"
+    "mitre_events": [
+        {"tactic": "Reconnaissance", "technique": "T1595", "confidence": 0.65},
+        {"tactic": "Reconnaissance", "technique": "T1595", "confidence": 0.66},
     ],
-    "event_count": 9
+    "events": [
+        {"elastic_id": "id-1"},
+        {"elastic_id": "id-2"},
+    ],
 }
 
-def main():
-    summary = summarize_attack_window(WINDOW)
-    print(summary)
-
-if __name__ == "__main__":
-    main()
+summary = summarize_attack_window(window)
+print(summary)

@@ -2,7 +2,7 @@
 attack_window_summary.py
 
 Tóm tắt attack window thành dạng có ý nghĩa
-(phục vụ MITRE mapping & AI reasoning)
+(phục vụ MITRE reasoning & AI correlation)
 """
 
 from typing import Dict, Any
@@ -11,65 +11,125 @@ from datetime import datetime
 
 
 # =========================
+# Helper
+# =========================
+
+def parse_ts(ts: str) -> datetime:
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except Exception:
+        return datetime.utcnow()
+
+
+# =========================
 # Core summarizer
 # =========================
 
 def summarize_attack_window(window: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Tạo summary cho một attack window
+    Tóm tắt 1 attack window đã được build
     """
 
+    # ===== Basic info =====
+    actor_ip = window.get("actor_ip")
+    target_ip = window.get("target_ip")
+    events = window.get("events", [])
     behaviors = window.get("behaviors", [])
     sensors = window.get("sensors", [])
-    event_count = window.get("event_count", len(behaviors))
+    event_count = window.get("event_count", len(events))
 
-    # Thời gian
-    start = datetime.fromisoformat(window["window_start"])
-    end = datetime.fromisoformat(window["window_end"])
-    duration_seconds = max((end - start).total_seconds(), 0.0)
+    # ===== Time =====
+    start_ts = parse_ts(window["window_start"])
+    end_ts = parse_ts(window["window_end"])
+    duration_seconds = max((end_ts - start_ts).total_seconds(), 0.0)
 
-    # Thống kê behavior
+    # ===== Behavior statistics =====
     behavior_counter = Counter(behaviors)
-    primary_behavior = behavior_counter.most_common(1)[0][0] if behavior_counter else None
+    primary_behavior = (
+        behavior_counter.most_common(1)[0][0]
+        if behavior_counter else None
+    )
     secondary_behaviors = [
         b for b, _ in behavior_counter.most_common()[1:]
     ]
 
-    # Heuristic đơn giản
+    # ===== MITRE aggregation =====
+    mitre_events = window.get("mitre_events", [])
+
+    tactics = [
+        m.get("tactic")
+        for m in mitre_events
+        if m and m.get("tactic")
+    ]
+    techniques = [
+        m.get("technique")
+        for m in mitre_events
+        if m and m.get("technique")
+    ]
+
+    tactic_counter = Counter(tactics)
+    technique_counter = Counter(techniques)
+
+    dominant_tactic = (
+        tactic_counter.most_common(1)[0][0]
+        if tactic_counter else None
+    )
+    dominant_technique = (
+        technique_counter.most_common(1)[0][0]
+        if technique_counter else None
+    )
+
+    # ===== Heuristic signals =====
     burst_activity = event_count >= 5 and duration_seconds <= 10
     multi_sensor = len(sensors) > 1
 
-    # Confidence hint (chỉ là gợi ý, KHÔNG kết luận)
-    if burst_activity and event_count >= 8:
+    # ===== Confidence hint (KHÔNG kết luận) =====
+    if dominant_tactic and event_count >= 3:
         confidence_hint = "high"
-    elif event_count >= 3:
+    elif event_count >= 2:
         confidence_hint = "medium"
     else:
         confidence_hint = "low"
 
+    # ===== Summary output =====
     summary = {
-        "actor_ip": window.get("actor_ip"),
-        "target_ip": window.get("target_ip"),
+        "actor_ip": actor_ip,
+        "target_ip": target_ip,
 
         "time": {
-            "start": window.get("window_start"),
-            "end": window.get("window_end"),
-            "duration_seconds": duration_seconds
+            "start": window["window_start"],
+            "end": window["window_end"],
+            "duration_seconds": duration_seconds,
         },
 
         "statistics": {
             "event_count": event_count,
             "unique_behaviors": len(behavior_counter),
-            "behavior_frequency": dict(behavior_counter)
+            "behavior_frequency": dict(behavior_counter),
+            "unique_tactics": len(tactic_counter),
+            "tactic_frequency": dict(tactic_counter),
+            "technique_frequency": dict(technique_counter),
         },
 
         "interpretation": {
             "primary_behavior": primary_behavior,
             "secondary_behaviors": secondary_behaviors,
+
+            "dominant_tactic": dominant_tactic,
+            "dominant_technique": dominant_technique,
+
             "burst_activity": burst_activity,
             "multi_sensor": multi_sensor,
-            "confidence_hint": confidence_hint
-        }
+
+            "confidence_hint": confidence_hint,
+        },
+
+        # ===== Keep raw reference (important for explainability) =====
+        "event_ids": [
+            e.get("elastic_id")
+            for e in events
+            if e.get("elastic_id")
+        ],
     }
 
     return summary

@@ -11,6 +11,10 @@ mitre_col = db[config.MONGO_COL_MITRE]
 
 def save_mitre_result(meta: dict, mitre_result: dict):
     doc = {
+        # ===== Elastic link =====
+        "elastic_index": meta.get("elastic_index"),
+        "elastic_id": meta.get("elastic_id"),
+
         # ===== Time =====
         "timestamp": meta.get("timestamp"),
         "created_at": datetime.utcnow(),

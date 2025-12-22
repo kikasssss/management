@@ -1,17 +1,13 @@
 """
 attack_window_builder.py
 
-Gom các security event (đã normalize) thành attack window
-Phục vụ AI correlation & suy luận chuỗi tấn công
+Gom các security event (đã normalize + enrich MITRE)
+thành attack window phục vụ correlation
 """
 
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
 
-
-# =========================
-# Config
-# =========================
 
 DEFAULT_WINDOW_SECONDS = 180  # 3 phút
 
@@ -21,9 +17,6 @@ DEFAULT_WINDOW_SECONDS = 180  # 3 phút
 # =========================
 
 def parse_ts(ts: str) -> datetime:
-    """
-    Parse ISO timestamp → datetime
-    """
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
     except Exception:
@@ -38,9 +31,6 @@ def build_attack_windows(
     events: List[Dict[str, Any]],
     window_seconds: int = DEFAULT_WINDOW_SECONDS
 ) -> List[Dict[str, Any]]:
-    """
-    Gom event thành attack windows
-    """
 
     if not events:
         return []
@@ -62,25 +52,36 @@ def build_attack_windows(
                 "window_end": ts,
                 "actor_ip": actor_ip,
                 "target_ip": target_ip,
-                "sensors": set([event.get("sensor")]),
-                "behaviors": [event.get("behavior")],
+
+                # aggregation fields
                 "events": [event],
+                "behaviors": [event.get("behavior")],
+                "sensors": set([event.get("sensor_id")]),
+
+                # MITRE aggregation (GIỮ NGUYÊN event-level)
+                "mitre_events": [
+                    event.get("mitre")
+                ] if event.get("mitre") else [],
             }
             continue
 
-        # điều kiện cùng window
         same_actor = actor_ip == current["actor_ip"]
         same_target = target_ip == current["target_ip"]
         within_time = (ts - current["window_end"]).total_seconds() <= window_seconds
 
         if same_actor and same_target and within_time:
             current["window_end"] = ts
-            current["sensors"].add(event.get("sensor"))
-            current["behaviors"].append(event.get("behavior"))
             current["events"].append(event)
+            current["behaviors"].append(event.get("behavior"))
+            current["sensors"].add(event.get("sensor_id"))
+
+            if event.get("mitre"):
+                current["mitre_events"].append(event["mitre"])
+
         else:
             # đóng window cũ
             current["sensors"] = list(current["sensors"])
+            current["event_count"] = len(current["events"])
             windows.append(current)
 
             # mở window mới
@@ -89,17 +90,21 @@ def build_attack_windows(
                 "window_end": ts,
                 "actor_ip": actor_ip,
                 "target_ip": target_ip,
-                "sensors": set([event.get("sensor")]),
-                "behaviors": [event.get("behavior")],
                 "events": [event],
+                "behaviors": [event.get("behavior")],
+                "sensors": set([event.get("sensor_id")]),
+                "mitre_events": [
+                    event.get("mitre")
+                ] if event.get("mitre") else [],
             }
 
     # đóng window cuối
     if current:
         current["sensors"] = list(current["sensors"])
+        current["event_count"] = len(current["events"])
         windows.append(current)
 
-    # format lại timestamp
+    # format timestamp
     for w in windows:
         w["window_start"] = w["window_start"].isoformat()
         w["window_end"] = w["window_end"].isoformat()

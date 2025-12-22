@@ -1,7 +1,6 @@
 # services/mitre_worker.py
 
 import time
-from datetime import datetime
 from elasticsearch import Elasticsearch
 
 import config
@@ -27,9 +26,14 @@ engine = MitreEngine()
 
 
 # =========================
-# METADATA EXTRACTOR (QUAN TRỌNG)
+# METADATA EXTRACTOR
 # =========================
 def extract_metadata(hit: dict) -> dict:
+    """
+    Trích metadata từ Elasticsearch hit
+    (KHÔNG ảnh hưởng normalize / AI)
+    """
+
     src = hit.get("_source", {})
     snort = src.get("snort", {})
 
@@ -46,22 +50,27 @@ def extract_metadata(hit: dict) -> dict:
     dst_ip, dst_port = split_ip_port(snort.get("dst_ap"))
 
     return {
+        # 🔗 LIÊN KẾT ELASTIC (MỚI THÊM)
+        "elastic_index": hit.get("_index"),
+        "elastic_id": hit.get("_id"),
+
+        # TIME
         "timestamp": src.get("@timestamp"),
 
-        # sensor
+        # SENSOR
         "sensor_id": src.get("source") or src.get("agent", {}).get("id"),
 
-        # network
+        # NETWORK
         "src_ip": src_ip,
         "dst_ip": dst_ip,
         "src_port": src_port,
         "dst_port": dst_port,
         "proto": snort.get("proto"),
 
-        # 🔥 THÊM MESSAGE (QUAN TRỌNG)
+        # MESSAGE
         "msg": snort.get("msg"),
 
-        # (tuỳ chọn – để debug sau)
+        # DEBUG / OPTIONAL
         "rule": snort.get("rule"),
         "action": snort.get("action"),
         "class": snort.get("class"),
@@ -112,9 +121,8 @@ def run_forever():
                 src = hit.get("_source", {})
                 last_ts = src.get("@timestamp")
 
-                # 1️⃣ extract metadata (CHO MONGO)
+                # 1️⃣ extract metadata (CHO MONGO + LINK ELASTIC)
                 meta = extract_metadata(hit)
-
 
                 # 2️⃣ normalize (CHO AI)
                 features = normalize_elastic_log(hit)
@@ -133,7 +141,7 @@ def run_forever():
 
 
 # =========================
-# ENTRYPOINT FOR APP.PY
+# ENTRYPOINT FOR app.py
 # =========================
 def start_worker():
     run_forever()

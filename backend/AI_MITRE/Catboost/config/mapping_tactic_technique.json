@@ -1,0 +1,9 @@
+{
+  "Credential Access": ["T1110", "T1040", "T1555"],
+  "Initial Access": ["T1190", "T1133", "T1078"],
+  "Reconnaissance": ["T1595", "T1592"],
+  "Exfiltration": ["T1041", "T1048"],
+  "Execution": ["T1059"],
+  "Persistence": ["T1547", "T1053"],
+  "Privilege Escalation": ["T1068", "T1548"]
+}

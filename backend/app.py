@@ -8,6 +8,7 @@ from routes.mitre_api import mitre_bp
 from threading import Thread
 from scheduler.updater import background_data_updater
 from services.mitre_worker import start_worker
+from routes.correlation_api import correlation_bp
 app = Flask(__name__)
 CORS(app)
 
@@ -15,6 +16,7 @@ CORS(app)
 app.register_blueprint(frontend_api)
 app.register_blueprint(operator_api)
 app.register_blueprint(mitre_bp)
+app.register_blueprint(correlation_bp)
 def start_background_services():
     t = threading.Thread(
         target=start_worker,

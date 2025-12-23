@@ -18,6 +18,9 @@ MONGO_COL_RULE_SETS = "rule_sets"
 MONGO_COL_RULES = "rules"
 MONGO_COL_DEPLOYMENT = "deployment_status"
 DEPLOYMENT_ID = "production_sensors"
+MONGO_COL_CORRELATION = "correlation_results"
+
+
 
 SQLITE_DB = "/home/central/TI/ThreatFox/threat_iocs.db"
 RULE_FILE = "/home/central/rules/snort/all_rule.rules"

@@ -2,7 +2,7 @@
 correlation_service.py
 
 Orchestrates the full correlation pipeline:
-Events -> Attack Window -> Summary -> (Optional) GPT Correlation -> Storage
+Events -> Attack Window -> Summary -> Maturity Check -> (Optional) GPT Correlation -> Storage
 """
 
 from typing import List, Dict, Any, Optional
@@ -13,6 +13,52 @@ from AI_MITRE.AI.correlation.attack_window_summary import summarize_attack_windo
 from AI_MITRE.AI.engines.gpt_correlation_engine import GPTCorrelationEngine
 from services.correlation_storage import save_correlation_result_to_mongo
 
+
+# ============================================================
+# Heuristic: decide whether a window is mature enough for AI
+# ============================================================
+
+def should_call_ai(summary: Dict[str, Any]) -> bool:
+    """
+    Decide whether to invoke GPT correlation based on window maturity.
+
+    This is a COST-CONTROL + SOC-LOGIC layer.
+    """
+
+    stats = summary.get("statistics", {})
+    interp = summary.get("interpretation", {})
+
+    event_count = stats.get("event_count", 0)
+    unique_behaviors = stats.get("unique_behaviors", 0)
+
+    dominant_tactic = interp.get("dominant_tactic")
+    confidence_hint = interp.get("confidence_hint")
+    burst = interp.get("burst_activity", False)
+    multi_sensor = interp.get("multi_sensor", False)
+
+    # ---- Rule 1: too few events → skip AI
+    if event_count < 3:
+        return False
+
+    # ---- Rule 2: single behavior & no burst → skip
+    if unique_behaviors < 2 and not burst:
+        return False
+
+    # ---- Rule 3: no MITRE signal → skip
+    if dominant_tactic is None:
+        return False
+
+    # ---- Rule 4: low confidence → skip
+    if confidence_hint == "low":
+        return False
+
+    # ---- Bonus signals: burst or multi-sensor → strong candidate
+    return True
+
+
+# ============================================================
+# Main pipeline
+# ============================================================
 
 def run_correlation_pipeline(
     *,
@@ -27,13 +73,15 @@ def run_correlation_pipeline(
     Args:
         events: List of normalized security events
         correlation_collection: MongoDB collection for correlation results
-        enable_ai: Whether to run GPT-based correlation
+        enable_ai: Whether GPT correlation is globally enabled
         gpt_engine: GPTCorrelationEngine instance (required if enable_ai=True)
 
     Returns:
-        List of results per attack window:
-        - If enable_ai=False: returns summaries only
-        - If enable_ai=True: returns incident_id + summary
+        Per-window results with:
+        - summary
+        - analysis (GPT or None)
+        - ai_triggered (bool)
+        - incident_id (if GPT ran)
     """
 
     if enable_ai and gpt_engine is None:
@@ -50,11 +98,14 @@ def run_correlation_pipeline(
     # 2. Process each window
     # =========================
     for window in windows:
-        # ---- Summarize window ----
         summary = summarize_attack_window(window)
 
-        # ---- AI correlation (optional) ----
-        if enable_ai:
+        ai_allowed = enable_ai and should_call_ai(summary)
+
+        # =========================
+        # 3. GPT correlation (if allowed)
+        # =========================
+        if ai_allowed:
             gpt_result = gpt_engine.correlate_window(summary)
 
             incident_id = save_correlation_result_to_mongo(
@@ -68,15 +119,17 @@ def run_correlation_pipeline(
                     "incident_id": incident_id,
                     "summary": summary,
                     "analysis": gpt_result,
+                    "ai_triggered": True,
                 }
             )
 
         else:
-            # ---- No AI: return summary only ----
+            # ---- No AI: store summary only (optional future use)
             results.append(
                 {
                     "summary": summary,
                     "analysis": None,
+                    "ai_triggered": False,
                 }
             )
 

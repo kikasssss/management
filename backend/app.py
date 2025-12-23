@@ -10,8 +10,13 @@ from scheduler.updater import background_data_updater
 from services.mitre_worker import start_worker
 from routes.correlation_api import correlation_bp
 app = Flask(__name__)
-CORS(app)
-
+CORS(
+    app,
+    resources={r"/api/*": {"origins": "*"}},
+    supports_credentials=True,
+    methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"]
+)
 # Register Blueprints
 app.register_blueprint(frontend_api)
 app.register_blueprint(operator_api)

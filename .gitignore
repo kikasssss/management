@@ -30,3 +30,7 @@ frontend/.next/
 frontend/dist/
 frontend/build/
 frontend/.vite/
+# ===== ENV / SECRETS =====
+.env
+*.env
+backend/.env

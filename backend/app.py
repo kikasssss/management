@@ -9,6 +9,8 @@ from threading import Thread
 from scheduler.updater import background_data_updater
 from services.mitre_worker import start_worker
 from routes.correlation_api import correlation_bp
+from dotenv import load_dotenv
+load_dotenv()
 app = Flask(__name__)
 CORS(
     app,

@@ -16,39 +16,67 @@ export default function CorrelationPanel() {
   const [enableAI, setEnableAI] = useState(false);
   const [loading, setLoading] = useState(false);
   const [incidents, setIncidents] = useState<CorrelationIncident[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   async function runCorrelation() {
     setLoading(true);
+    setError(null);
+
+    // 👉 DEMO EVENTS (bắt buộc để backend không trả 400)
+    const demoEvents = [
+      {
+        src_ip: "10.0.0.1",
+        dst_ip: "10.0.0.2",
+        timestamp: new Date().toISOString(),
+        sensor: "sensor-01",
+        mitre: {
+          tactic: "TA0001",
+          technique: "T1059",
+        },
+      },
+    ];
+
     try {
       const res = await fetch(
         "http://100.100.100.100:5000/api/v1/correlation/run",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
-            events: [], // 👉 backend sẽ lấy events thật sau
             enable_ai: enableAI,
+            events: demoEvents, // ✅ KHÔNG RỖNG
           }),
         }
       );
 
-      const json = await res.json();
-      if (json.results) {
-        setIncidents(
-          json.results
-            .filter((r: any) => r.incident_id)
-            .map((r: any) => ({
-              incident_id: r.incident_id,
-              created_at: new Date().toISOString(),
-              actor_ip: r.summary.actor_ip,
-              target_ip: r.summary.target_ip,
-              risk_level: r.analysis?.risk_level ?? "low",
-              confidence: r.analysis?.confidence ?? 0,
-              lateral_movement:
-                r.analysis?.lateral_movement?.detected ?? false,
-            }))
-        );
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `HTTP ${res.status}`);
       }
+
+      const json = await res.json();
+
+      // Backend trả results theo window
+      if (Array.isArray(json.results)) {
+        setIncidents(
+          json.results.map((r: any) => ({
+            incident_id: r.incident_id ?? crypto.randomUUID(),
+            created_at: r.created_at ?? new Date().toISOString(),
+            actor_ip: r.window?.actor_ip ?? "unknown",
+            target_ip: r.window?.target_ip ?? "unknown",
+            risk_level: r.analysis?.risk_level ?? "low",
+            confidence: r.analysis?.confidence ?? 0,
+            lateral_movement:
+              r.analysis?.lateral_movement?.detected ?? false,
+          }))
+        );
+      } else {
+        setIncidents([]);
+      }
+    } catch (e: any) {
+      setError(e.message || "Correlation failed");
     } finally {
       setLoading(false);
     }
@@ -83,6 +111,13 @@ export default function CorrelationPanel() {
         </div>
       </div>
 
+      {/* ===== Error ===== */}
+      {error && (
+        <div className="text-xs text-red-600">
+          {error}
+        </div>
+      )}
+
       {/* ===== Incident Table ===== */}
       {incidents.length === 0 ? (
         <div className="text-xs text-gray-500">
@@ -108,7 +143,7 @@ export default function CorrelationPanel() {
                   {i.risk_level}
                 </td>
                 <td className="px-2 py-1 text-center">
-                  ✓
+                  {enableAI ? "✓" : "—"}
                 </td>
                 <td className="px-2 py-1 text-center">
                   {i.lateral_movement ? "✓" : "✗"}

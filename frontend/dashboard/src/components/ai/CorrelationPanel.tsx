@@ -3,80 +3,55 @@
 import { useState } from "react";
 
 type CorrelationIncident = {
-  incident_id: string;
-  created_at: string;
+  incident_id?: string;
   actor_ip: string;
   target_ip: string;
   risk_level: string;
   confidence: number;
   lateral_movement: boolean;
+  ai_triggered: boolean;
 };
 
 export default function CorrelationPanel() {
   const [enableAI, setEnableAI] = useState(false);
   const [loading, setLoading] = useState(false);
   const [incidents, setIncidents] = useState<CorrelationIncident[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [hasRun, setHasRun] = useState(false);
 
   async function runCorrelation() {
     setLoading(true);
-    setError(null);
-
-    // 👉 DEMO EVENTS (bắt buộc để backend không trả 400)
-    const demoEvents = [
-      {
-        src_ip: "10.0.0.1",
-        dst_ip: "10.0.0.2",
-        timestamp: new Date().toISOString(),
-        sensor: "sensor-01",
-        mitre: {
-          tactic: "TA0001",
-          technique: "T1059",
-        },
-      },
-    ];
-
+    setHasRun(true);
     try {
       const res = await fetch(
         "http://100.100.100.100:5000/api/v1/correlation/run",
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            events: [], // backend sẽ tự thay sau
             enable_ai: enableAI,
-            events: demoEvents, // ✅ KHÔNG RỖNG
           }),
         }
       );
 
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `HTTP ${res.status}`);
-      }
-
       const json = await res.json();
 
-      // Backend trả results theo window
-      if (Array.isArray(json.results)) {
-        setIncidents(
-          json.results.map((r: any) => ({
-            incident_id: r.incident_id ?? crypto.randomUUID(),
-            created_at: r.created_at ?? new Date().toISOString(),
-            actor_ip: r.window?.actor_ip ?? "unknown",
-            target_ip: r.window?.target_ip ?? "unknown",
-            risk_level: r.analysis?.risk_level ?? "low",
-            confidence: r.analysis?.confidence ?? 0,
-            lateral_movement:
-              r.analysis?.lateral_movement?.detected ?? false,
-          }))
-        );
+      if (json.results) {
+        const rows = json.results.map((r: any) => ({
+          incident_id: r.incident_id,
+          actor_ip: r.summary.actor_ip,
+          target_ip: r.summary.target_ip,
+          risk_level: r.analysis?.risk_level ?? "low",
+          confidence: r.analysis?.confidence ?? 0,
+          lateral_movement:
+            r.analysis?.lateral_movement?.detected ?? false,
+          ai_triggered: r.ai_triggered ?? false,
+        }));
+
+        setIncidents(rows);
       } else {
         setIncidents([]);
       }
-    } catch (e: any) {
-      setError(e.message || "Correlation failed");
     } finally {
       setLoading(false);
     }
@@ -111,19 +86,21 @@ export default function CorrelationPanel() {
         </div>
       </div>
 
-      {/* ===== Error ===== */}
-      {error && (
-        <div className="text-xs text-red-600">
-          {error}
+      {/* ===== Empty states ===== */}
+      {!hasRun && (
+        <div className="text-xs text-gray-500">
+          Correlation has not been run yet.
+        </div>
+      )}
+
+      {hasRun && !loading && incidents.length === 0 && (
+        <div className="text-xs text-gray-500">
+          No attack windows detected.
         </div>
       )}
 
       {/* ===== Incident Table ===== */}
-      {incidents.length === 0 ? (
-        <div className="text-xs text-gray-500">
-          No correlation incidents yet.
-        </div>
-      ) : (
+      {incidents.length > 0 && (
         <table className="w-full text-xs border">
           <thead className="bg-gray-50">
             <tr>
@@ -135,15 +112,15 @@ export default function CorrelationPanel() {
             </tr>
           </thead>
           <tbody>
-            {incidents.map((i) => (
-              <tr key={i.incident_id} className="border-t">
+            {incidents.map((i, idx) => (
+              <tr key={idx} className="border-t">
                 <td className="px-2 py-1">{i.actor_ip}</td>
                 <td className="px-2 py-1">{i.target_ip}</td>
                 <td className="px-2 py-1 text-center">
                   {i.risk_level}
                 </td>
                 <td className="px-2 py-1 text-center">
-                  {enableAI ? "✓" : "—"}
+                  {i.ai_triggered ? "✓" : "–"}
                 </td>
                 <td className="px-2 py-1 text-center">
                   {i.lateral_movement ? "✓" : "✗"}

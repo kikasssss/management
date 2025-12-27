@@ -18,13 +18,7 @@ from services.correlation_storage import save_correlation_result_to_mongo
 # Heuristic: decide whether a window is mature enough for AI
 # ============================================================
 
-def should_call_ai(summary: Dict[str, Any]) -> bool:
-    """
-    Decide whether to invoke GPT correlation based on window maturity.
-
-    This is a COST-CONTROL + SOC-LOGIC layer.
-    """
-
+def should_call_ai(summary):
     stats = summary.get("statistics", {})
     interp = summary.get("interpretation", {})
 
@@ -36,23 +30,22 @@ def should_call_ai(summary: Dict[str, Any]) -> bool:
     burst = interp.get("burst_activity", False)
     multi_sensor = interp.get("multi_sensor", False)
 
-    # ---- Rule 1: too few events → skip AI
-    if event_count < 3:
+    # 1. quá ít event
+    if event_count < 2:
         return False
 
-    # ---- Rule 2: single behavior & no burst → skip
+    # 2. hành vi nghèo
     if unique_behaviors < 2 and not burst:
         return False
 
-    # ---- Rule 3: no MITRE signal → skip
-    if dominant_tactic is None:
+    # 3. có tín hiệu đủ mạnh (KHÔNG ép tactic)
+    if not (dominant_tactic or burst or multi_sensor):
         return False
 
-    # ---- Rule 4: low confidence → skip
+    # 4. confidence thấp → bỏ
     if confidence_hint == "low":
         return False
 
-    # ---- Bonus signals: burst or multi-sensor → strong candidate
     return True
 
 

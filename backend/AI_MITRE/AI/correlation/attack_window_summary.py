@@ -53,7 +53,7 @@ def summarize_attack_window(window: Dict[str, Any]) -> Dict[str, Any]:
         b for b, _ in behavior_counter.most_common()[1:]
     ]
 
-    # ===== MITRE aggregation =====
+    # ===== MITRE aggregation (event-level, optional) =====
     mitre_events = window.get("mitre_events", [])
 
     tactics = [
@@ -83,11 +83,26 @@ def summarize_attack_window(window: Dict[str, Any]) -> Dict[str, Any]:
     burst_activity = event_count >= 5 and duration_seconds <= 10
     multi_sensor = len(sensors) > 1
 
+    # ===== Lateral Movement proxy (QUAN TRỌNG) =====
+    lateral_behaviors = (
+        "SMB access attempt",
+        "RDP connection attempt",
+        "SSH login attempt",
+        "WinRM access attempt",
+    )
+
+    lateral_proxy = (
+        primary_behavior in lateral_behaviors
+        and (multi_sensor or burst_activity)
+    )
+
     # ===== Confidence hint (KHÔNG kết luận) =====
-    if dominant_tactic and event_count >= 3:
+    if lateral_proxy:
         confidence_hint = "high"
-    elif event_count >= 2:
+    elif (dominant_tactic or multi_sensor) and event_count >= 3:
         confidence_hint = "medium"
+    elif event_count >= 2:
+        confidence_hint = "low"
     else:
         confidence_hint = "low"
 
@@ -115,12 +130,18 @@ def summarize_attack_window(window: Dict[str, Any]) -> Dict[str, Any]:
             "primary_behavior": primary_behavior,
             "secondary_behaviors": secondary_behaviors,
 
+            # event-level MITRE (nếu có)
             "dominant_tactic": dominant_tactic,
             "dominant_technique": dominant_technique,
 
+            # heuristic signals
             "burst_activity": burst_activity,
             "multi_sensor": multi_sensor,
 
+            # NEW: lateral movement proxy
+            "lateral_proxy": lateral_proxy,
+
+            # final hint for orchestration / AI trigger
             "confidence_hint": confidence_hint,
         },
 
@@ -133,4 +154,3 @@ def summarize_attack_window(window: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     return summary
-

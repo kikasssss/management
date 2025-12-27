@@ -9,7 +9,13 @@ from typing import Dict, Any
 from collections import Counter
 from datetime import datetime
 
-
+def extract_message(ev: Dict[str, Any]) -> str | None:
+    """
+    Extract rule message from normalized Snort event
+    """
+    return (
+        ev.get("rule", {}).get("message")
+    )
 # =========================
 # Helper
 # =========================
@@ -105,7 +111,14 @@ def summarize_attack_window(window: Dict[str, Any]) -> Dict[str, Any]:
         confidence_hint = "low"
     else:
         confidence_hint = "low"
+    # =========================
+    messages = []
+    for ev in events:
+        msg = extract_message(ev)
+        if msg:
+            messages.append(msg)
 
+    message_frequency = dict(Counter(messages))
     # ===== Summary output =====
     summary = {
         "actor_ip": actor_ip,
@@ -151,6 +164,9 @@ def summarize_attack_window(window: Dict[str, Any]) -> Dict[str, Any]:
             for e in events
             if e.get("elastic_id")
         ],
+        "evidence": {
+            "message_frequency": message_frequency
+        }
     }
 
     return summary

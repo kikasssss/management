@@ -55,7 +55,7 @@ def infer_behavior(snort: Dict[str, Any], dst_port: Optional[int]) -> str:
     if dst_port in PORT_BEHAVIOR_MAP:
         return PORT_BEHAVIOR_MAP[dst_port]
 
-    return "Suspicious network activity"
+    return "Unclassified detection"
 
 
 def is_lateral_candidate(

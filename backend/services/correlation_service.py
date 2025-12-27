@@ -12,11 +12,28 @@ from AI_MITRE.AI.correlation.attack_window_builder import build_attack_windows
 from AI_MITRE.AI.correlation.attack_window_summary import summarize_attack_window
 from AI_MITRE.AI.engines.gpt_correlation_engine import GPTCorrelationEngine
 from services.correlation_storage import save_correlation_result_to_mongo
-
+from AI_MITRE.AI.engines.enrich_event import enrich_event_with_mitre
 
 # ============================================================
 # Heuristic: decide whether a window is mature enough for AI
 # ============================================================
+def enrich_events_with_mitre(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Enrich MITRE information for events if missing.
+    This function belongs to the orchestration layer.
+    """
+    enriched_events = []
+
+    for ev in events:
+        if ev.get("mitre") is None:
+            try:
+                ev = enrich_event_with_mitre(ev)
+            except Exception:
+                # Enrichment failure must NOT break correlation
+                pass
+        enriched_events.append(ev)
+
+    return enriched_events
 
 def should_call_ai(summary):
     stats = summary.get("statistics", {})
@@ -76,6 +93,10 @@ def run_correlation_pipeline(
         - ai_triggered (bool)
         - incident_id (if GPT ran)
     """
+    # =========================
+    # 0. MITRE enrichment
+    # =========================
+    events = enrich_events_with_mitre(events)
 
     if enable_ai and gpt_engine is None:
         raise ValueError("gpt_engine must be provided when enable_ai=True")

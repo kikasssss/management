@@ -19,7 +19,7 @@ MONGO_COL_RULES = "rules"
 MONGO_COL_DEPLOYMENT = "deployment_status"
 DEPLOYMENT_ID = "production_sensors"
 MONGO_COL_CORRELATION = "correlation_results"
-
+MONGO_COL_NORMALIZED = "normalized_events"
 
 
 SQLITE_DB = "/home/central/TI/ThreatFox/threat_iocs.db"

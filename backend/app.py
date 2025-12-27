@@ -10,6 +10,7 @@ from scheduler.updater import background_data_updater
 from services.mitre_worker import start_worker
 from routes.correlation_api import correlation_bp
 from dotenv import load_dotenv
+from scheduler.snort_normalize_worker import run as start_snort_normalizer
 load_dotenv()
 app = Flask(__name__)
 CORS(
@@ -35,6 +36,14 @@ def start_background_services():
     )
     t.start()
     print("[APP] MITRE worker started in background")
+    # Snort normalize worker
+    t2 = threading.Thread(
+        target=start_snort_normalizer,
+        daemon=True
+    )
+    t2.start()
+    print("[APP] Snort normalize worker started in background")
+
 
 if __name__ == "__main__":
     start_background_services()

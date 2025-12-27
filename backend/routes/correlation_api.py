@@ -174,3 +174,57 @@ def get_incident_detail(incident_id):
             "meta": doc.get("meta"),
         }
     })
+
+@correlation_bp.route("/run_from_mongo", methods=["POST"])
+def run_correlation_from_mongo():
+    payload = request.get_json(force=True, silent=True) or {}
+
+    since_minutes = int(payload.get("since_minutes", 10))
+    limit = int(payload.get("limit", 2000))
+
+    from datetime import datetime, timedelta, timezone
+
+    since_ts = (
+        datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
+    ).isoformat()
+
+    db = _get_db()
+    events_col = db[config.MONGO_COL_NORMALIZED]
+
+    cursor = (
+        events_col
+        .find({"timestamp": {"$gte": since_ts}}, {"_id": 0})
+        .sort("timestamp", 1)
+        .limit(limit)
+    )
+
+    events = list(cursor)
+
+    if not events:
+        return jsonify({
+            "status": "ok",
+            "window_count": 0,
+            "results": []
+        })
+
+    # Minimal validation only
+    valid_events = [
+        ev for ev in events
+        if ev.get("timestamp")
+        and ev.get("actor", {}).get("ip")
+        and ev.get("target", {}).get("ip")
+    ]
+
+    results = run_correlation_pipeline(
+        events=valid_events,
+        correlation_collection=None,
+        enable_ai=False,
+        gpt_engine=None,
+    )
+
+    return jsonify({
+        "status": "ok",
+        "event_count": len(valid_events),
+        "window_count": len(results),
+        "results": results,
+    })

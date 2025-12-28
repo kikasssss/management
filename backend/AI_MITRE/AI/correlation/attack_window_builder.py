@@ -9,7 +9,7 @@ from typing import List, Dict, Any
 from datetime import datetime, timedelta
 
 
-DEFAULT_WINDOW_SECONDS = 180  # 3 phút
+DEFAULT_WINDOW_SECONDS = 300
 
 
 # =========================

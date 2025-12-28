@@ -241,7 +241,7 @@ def run_correlation_with_ai():
 
     try:
         # Run GPT only on this summary
-        ai_result = gpt_engine.run(summary)
+        ai_result = gpt_engine.correlate_window(summary)
 
     except Exception as e:
         return jsonify({

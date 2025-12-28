@@ -13,7 +13,7 @@ import config
 from services.correlation_service import run_correlation_pipeline
 from AI_MITRE.AI.clients.openai_responses_client import OpenAIResponsesClient
 from AI_MITRE.AI.engines.gpt_correlation_engine import GPTCorrelationEngine
-
+from services.correlation_service import run_correlation_pipeline
 
 correlation_bp = Blueprint(
     "correlation",
@@ -227,4 +227,29 @@ def run_correlation_from_mongo():
         "event_count": len(valid_events),
         "window_count": len(results),
         "results": results,
+    })
+@correlation_bp.route("/run_with_ai", methods=["POST"])
+def run_correlation_with_ai():
+    payload = request.get_json(force=True, silent=True) or {}
+
+    summary = payload.get("summary")
+    if not summary:
+        return jsonify({"error": "summary is required"}), 400
+
+    # Init GPT engine
+    gpt_engine = GPTCorrelationEngine()
+
+    try:
+        # Run GPT only on this summary
+        ai_result = gpt_engine.run(summary)
+
+    except Exception as e:
+        return jsonify({
+            "error": "GPT correlation failed",
+            "detail": str(e)
+        }), 500
+
+    return jsonify({
+        "status": "ok",
+        "analysis": ai_result
     })

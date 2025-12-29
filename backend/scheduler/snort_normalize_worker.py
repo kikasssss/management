@@ -21,7 +21,7 @@ from pymongo.collection import Collection
 
 import config
 from AI_MITRE.AI.schema.snort_event_normalizer import normalize_snort_event
-
+from services.pipeline_offset import get_offset, set_offset, OFFSET_NORMALIZE
 from services.pipeline_offset import get_mitre_offset
 # =========================
 # CONFIG
@@ -32,17 +32,29 @@ BATCH_SIZE = 500
 POLL_INTERVAL = 2
 CHECKPOINT_FILE = "data/snort_normalize_checkpoint.json"
 PIT_KEEP_ALIVE = "2m"
+def mitre_ready(col_mitre: Collection, elastic_id: str) -> bool:
+    return col_mitre.find_one(
+        {"elastic_id": elastic_id},
+        {"_id": 1}
+    ) is not None
+def sort_leq(a, b):
+    """
+    Compare Elasticsearch sort keys: [timestamp, _id]
+    timestamp: int | str
+    _id: str
+    """
 
-def sort_leq(a: list, b: list) -> bool:
-    """
-    So sánh lexicographic cho [timestamp(str), shard_doc(int)].
-    ISO timestamp so theo string là đúng thứ tự thời gian.
-    """
-    if a is None or b is None:
+    if not a or not b:
         return False
-    if a[0] != b[0]:
-        return a[0] <= b[0]
-    return a[1] <= b[1]
+
+    # Compare timestamp first
+    if a[0] < b[0]:
+        return True
+    if a[0] > b[0]:
+        return False
+
+    # Same timestamp → compare elastic_id (string)
+    return str(a[1]) <= str(b[1])
 # =========================
 # TIME
 # =========================
@@ -144,24 +156,51 @@ def build_es_query(
 
 def normalize_hit(hit: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     src = hit.get("_source", {})
-    if not src or "snort" not in src or "@timestamp" not in src:
+    if not src or "snort" not in src:
         return None
 
+    # =========================
+    # 1. LẤY TIMESTAMP GỐC TỪ ELASTIC
+    # =========================
+    ts_raw = src.get("@timestamp")
+    if not ts_raw:
+        return None
+
+    try:
+        # ISO8601 -> datetime UTC
+        event_ts = datetime.fromisoformat(
+            ts_raw.replace("Z", "+00:00")
+        ).astimezone(timezone.utc)
+    except Exception:
+        return None
+
+    # =========================
+    # 2. GỌI NORMALIZER CHUẨN
+    # =========================
     log = dict(src)
     log["_id"] = hit["_id"]
 
     event = normalize_snort_event(log)
-
-    if not event.get("timestamp"):
+    if not event:
         return None
+
+    # =========================
+    # 3. GHI ĐÈ / ÉP FIELD BẮT BUỘC
+    # =========================
+    event["timestamp"] = event_ts          # 🔥 QUAN TRỌNG NHẤT
+    event["_ingested_at"] = utc_now()       # chỉ để debug / audit
+    event["stage"] = "normalized"
+    event["elastic_id"] = hit["_id"]
+
+    # =========================
+    # 4. VALIDATE TỐI THIỂU CHO WINDOW
+    # =========================
     if not event.get("actor", {}).get("ip"):
         return None
     if not event.get("target", {}).get("ip"):
         return None
 
-    event["_ingested_at"] = utc_now()
     return event
-
 
 def upsert_events(col: Collection, events: List[Dict[str, Any]]):
     if not events:
@@ -190,7 +229,14 @@ def run():
     es = get_es_client()
     col = get_mongo_collection()
 
-    search_after = load_checkpoint()
+    # 🔹 collection MITRE results
+    client = MongoClient(config.MONGO_URI)
+    db = client[config.MONGO_DB]
+    mitre_col = db[config.MONGO_COL_MITRE]
+
+    # 🔹 normalize offset riêng
+    search_after = get_offset("normalize_snort") or load_checkpoint()
+
     pit_id = None
 
     try:
@@ -199,12 +245,6 @@ def run():
 
         while True:
             try:
-                offset_sort = get_mitre_offset()
-                if not offset_sort:
-                    # MITRE chưa chạy/ chưa set offset
-                    time.sleep(POLL_INTERVAL)
-                    continue
-
                 query = build_es_query(pit_id, search_after)
                 res = es.search(body=query)
 
@@ -213,18 +253,23 @@ def run():
                     time.sleep(POLL_INTERVAL)
                     continue
 
-                # ✅ chỉ lấy các hit <= offset_sort
                 allowed = []
                 for h in hits:
-                    hs = h.get("sort")
-                    if hs and sort_leq(hs, offset_sort):
-                        allowed.append(h)
-                    else:
-                        break  # vì hits đã sort asc, vượt offset thì dừng luôn
+                    elastic_id = h["_id"]
+
+                    # 🔒 MITRE-GATED CONDITION (QUAN TRỌNG NHẤT)
+                    if not mitre_ready(mitre_col, elastic_id):
+                        break  # chưa sẵn sàng → dừng batch
+
+                    allowed.append(h)
 
                 if not allowed:
-                    # batch này toàn log mới hơn offset => chờ MITRE tiến lên
                     time.sleep(POLL_INTERVAL)
+                    print(
+                        "[Normalize] waiting | "
+                        f"search_after={search_after} | "
+                        f"mitre_offset={offset_sort}"
+                    )
                     continue
 
                 events = []
@@ -235,16 +280,16 @@ def run():
 
                 upsert_events(col, events)
 
-                # ✅ chỉ advance checkpoint tới cái cuối cùng đã xử lý (<= offset)
+                # 🔹 advance offset normalize (KHÔNG dùng mitre_offset)
                 search_after = allowed[-1]["sort"]
                 save_checkpoint(search_after)
+                set_offset("normalize_snort", search_after)
 
                 print(
                     f"[+] fetched={len(hits)} "
                     f"allowed={len(allowed)} "
                     f"normalized={len(events)} "
-                    f"search_after={search_after} "
-                    f"mitre_offset={offset_sort}"
+                    f"search_after={search_after}"
                 )
 
                 time.sleep(0.05)

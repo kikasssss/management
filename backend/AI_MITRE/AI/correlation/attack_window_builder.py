@@ -3,10 +3,11 @@ attack_window_builder.py
 
 Gom các security event (đã normalize + enrich MITRE)
 thành attack window phục vụ correlation
+(MULTI-SENSOR SAFE, SESSION-BASED)
 """
 
-from typing import List, Dict, Any
-from datetime import datetime, timedelta, timezone
+from typing import List, Dict, Any, Tuple
+from datetime import datetime, timezone
 
 DEFAULT_WINDOW_SECONDS = 300
 
@@ -19,7 +20,13 @@ def parse_ts(ts: str) -> datetime:
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
     except Exception:
-        return datetime.utcnow()
+        return datetime.utcnow().replace(tzinfo=timezone.utc)
+
+
+def normalize_ts(ts: datetime) -> datetime:
+    if ts.tzinfo is None:
+        return ts.replace(tzinfo=timezone.utc)
+    return ts
 
 
 # =========================
@@ -35,110 +42,104 @@ def build_attack_windows(
     if not events:
         return []
 
-    # sort theo timestamp (GIỮ NGUYÊN)
+    # sort theo timestamp (bắt buộc cho session window)
     events = sorted(events, key=lambda e: e["timestamp"])
 
-    windows = []
-    current = None
-
-    # now luôn là UTC-aware
     now = datetime.now(timezone.utc)
 
-    for event in events:
-        ts = event["timestamp"]
+    # active windows theo key (actor_ip, target_ip)
+    active_windows: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    finished_windows: List[Dict[str, Any]] = []
 
-        # === FIX: đảm bảo ts là timezone-aware ===
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+    for event in events:
+        ts = normalize_ts(event["timestamp"])
 
         actor_ip = event["actor"]["ip"]
         target_ip = event["target"]["ip"]
+        key = (actor_ip, target_ip)
 
-        if not current:
-            current = {
+        # =========================
+        # MỞ WINDOW MỚI
+        # =========================
+        if key not in active_windows:
+            active_windows[key] = {
                 "window_start": ts,
                 "window_end": ts,
                 "actor_ip": actor_ip,
                 "target_ip": target_ip,
 
-                # aggregation fields (GIỮ NGUYÊN)
                 "events": [event],
                 "behaviors": [event.get("behavior")],
                 "sensors": set([event.get("sensor_id")]),
-                "mitre_events": [
-                    event.get("mitre")
-                ] if event.get("mitre") else [],
+                "mitre_events": [event.get("mitre")] if event.get("mitre") else [],
 
-                # realtime flag
                 "status": "open",
             }
             continue
 
-        # === FIX: normalize timezone window_end ===
-        window_end = current["window_end"]
-        if window_end.tzinfo is None:
-            window_end = window_end.replace(tzinfo=timezone.utc)
+        window = active_windows[key]
+        window_end = normalize_ts(window["window_end"])
 
-        same_actor = actor_ip == current["actor_ip"]
-        same_target = target_ip == current["target_ip"]
-        within_time = (ts - window_end).total_seconds() <= window_seconds
+        gap = (ts - window_end).total_seconds()
 
-        if same_actor and same_target and within_time:
-            current["window_end"] = ts
-            current["events"].append(event)
-            current["behaviors"].append(event.get("behavior"))
-            current["sensors"].add(event.get("sensor_id"))
+        # =========================
+        # CÙNG SESSION
+        # =========================
+        if gap <= window_seconds:
+            window["window_end"] = ts
+            window["events"].append(event)
+            window["behaviors"].append(event.get("behavior"))
+            window["sensors"].add(event.get("sensor_id"))
 
             if event.get("mitre"):
-                current["mitre_events"].append(event["mitre"])
+                window["mitre_events"].append(event["mitre"])
 
+        # =========================
+        # ĐỨT SESSION → ĐÓNG WINDOW
+        # =========================
         else:
-            # đóng window cũ
-            current["sensors"] = list(current["sensors"])
-            current["event_count"] = len(current["events"])
-            current["status"] = "closed"
-            windows.append(current)
+            window["sensors"] = list(window["sensors"])
+            window["event_count"] = len(window["events"])
+            window["status"] = "closed"
+            finished_windows.append(window)
 
-            # mở window mới
-            current = {
+            # mở window mới cho cùng key
+            active_windows[key] = {
                 "window_start": ts,
                 "window_end": ts,
                 "actor_ip": actor_ip,
                 "target_ip": target_ip,
+
                 "events": [event],
                 "behaviors": [event.get("behavior")],
                 "sensors": set([event.get("sensor_id")]),
-                "mitre_events": [
-                    event.get("mitre")
-                ] if event.get("mitre") else [],
+                "mitre_events": [event.get("mitre")] if event.get("mitre") else [],
+
                 "status": "open",
             }
 
     # =========================
-    # xử lý window cuối (ĐOẠN BẠN HỎI)
+    # XỬ LÝ CÁC WINDOW CÒN MỞ
     # =========================
-    if current:
-        window_end = current["window_end"]
-
-        # === FIX: normalize timezone ===
-        if window_end.tzinfo is None:
-            window_end = window_end.replace(tzinfo=timezone.utc)
-
+    for window in active_windows.values():
+        window_end = normalize_ts(window["window_end"])
         age = (now - window_end).total_seconds()
 
-        current["sensors"] = list(current["sensors"])
-        current["event_count"] = len(current["events"])
+        window["sensors"] = list(window["sensors"])
+        window["event_count"] = len(window["events"])
 
         if age >= window_seconds:
-            current["status"] = "closed"
-            windows.append(current)
+            window["status"] = "closed"
+            finished_windows.append(window)
         elif allow_open_window:
-            current["status"] = "open"
-            windows.append(current)
+            window["status"] = "open"
+            finished_windows.append(window)
 
-    # format timestamp output (GIỮ NGUYÊN)
-    for w in windows:
+    # =========================
+    # FORMAT TIMESTAMP OUTPUT
+    # =========================
+    for w in finished_windows:
         w["window_start"] = w["window_start"].isoformat()
         w["window_end"] = w["window_end"].isoformat()
 
-    return windows
+    return finished_windows

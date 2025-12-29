@@ -17,11 +17,7 @@ from AI_MITRE.AI.engines.enrich_event import enrich_event_with_mitre
 # ============================================================
 # Heuristic: decide whether a window is mature enough for AI
 # ============================================================
-def enrich_events_with_mitre(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Enrich MITRE information for events if missing.
-    This function belongs to the orchestration layer.
-    """
+def enrich_events_with_mitre(events):
     enriched_events = []
 
     for ev in events:
@@ -29,8 +25,13 @@ def enrich_events_with_mitre(events: List[Dict[str, Any]]) -> List[Dict[str, Any
             try:
                 ev = enrich_event_with_mitre(ev)
             except Exception:
-                # Enrichment failure must NOT break correlation
-                pass
+                ev["mitre"] = {
+                    "tactic": None,
+                    "technique": None,
+                    "confidence": 0.0,
+                    "source": "none",
+                }
+
         enriched_events.append(ev)
 
     return enriched_events

@@ -9,6 +9,7 @@ from typing import Dict, Any
 from collections import Counter
 from datetime import datetime
 
+
 def extract_message(ev: Dict[str, Any]) -> str | None:
     """
     Extract rule message from normalized Snort event
@@ -16,6 +17,8 @@ def extract_message(ev: Dict[str, Any]) -> str | None:
     return (
         ev.get("rule", {}).get("message")
     )
+
+
 # =========================
 # Helper
 # =========================
@@ -85,6 +88,12 @@ def summarize_attack_window(window: Dict[str, Any]) -> Dict[str, Any]:
         if technique_counter else None
     )
 
+    # ===== NEW: MITRE coverage (defensive, không đổi format) =====
+    mitre_event_coverage = sum(
+        1 for m in mitre_events
+        if m and (m.get("tactic") or m.get("technique"))
+    )
+
     # ===== Heuristic signals =====
     burst_activity = event_count >= 5 and duration_seconds <= 10
     multi_sensor = len(sensors) > 1
@@ -105,12 +114,15 @@ def summarize_attack_window(window: Dict[str, Any]) -> Dict[str, Any]:
     # ===== Confidence hint (KHÔNG kết luận) =====
     if lateral_proxy:
         confidence_hint = "high"
-    elif (dominant_tactic or multi_sensor) and event_count >= 3:
+    elif dominant_tactic and event_count >= 3:
         confidence_hint = "medium"
+    elif multi_sensor and event_count >= 3:
+        confidence_hint = "low"
     elif event_count >= 2:
         confidence_hint = "low"
     else:
         confidence_hint = "low"
+
     # =========================
     messages = []
     for ev in events:
@@ -119,6 +131,7 @@ def summarize_attack_window(window: Dict[str, Any]) -> Dict[str, Any]:
             messages.append(msg)
 
     message_frequency = dict(Counter(messages))
+
     # ===== Summary output =====
     summary = {
         "actor_ip": actor_ip,
@@ -137,6 +150,9 @@ def summarize_attack_window(window: Dict[str, Any]) -> Dict[str, Any]:
             "unique_tactics": len(tactic_counter),
             "tactic_frequency": dict(tactic_counter),
             "technique_frequency": dict(technique_counter),
+
+            # NEW: giúp phân biệt chưa-map vs clean
+            "mitre_event_coverage": mitre_event_coverage,
         },
 
         "interpretation": {
@@ -151,7 +167,7 @@ def summarize_attack_window(window: Dict[str, Any]) -> Dict[str, Any]:
             "burst_activity": burst_activity,
             "multi_sensor": multi_sensor,
 
-            # NEW: lateral movement proxy
+            # lateral movement proxy
             "lateral_proxy": lateral_proxy,
 
             # final hint for orchestration / AI trigger

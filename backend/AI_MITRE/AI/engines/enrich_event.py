@@ -10,6 +10,16 @@ def enrich_event_with_mitre(event: Dict[str, Any]) -> Dict[str, Any]:
     - KHÔNG chạy lại CatBoost
     """
 
+    # ===== Ensure MITRE schema always exists =====
+    event.setdefault("mitre", {
+        "tactic": None,
+        "technique": None,
+        "confidence": 0.0,
+        "tactic_confidence": None,
+        "technique_confidence": None,
+        "source": "none",
+    })
+
     elastic_id = event.get("elastic_id")
     if not elastic_id:
         return event
@@ -18,10 +28,11 @@ def enrich_event_with_mitre(event: Dict[str, Any]) -> Dict[str, Any]:
     if not mitre:
         return event
 
+    # ===== Overwrite only when mapping exists =====
     event["mitre"] = {
         "tactic": mitre.get("tactic"),
         "technique": mitre.get("technique"),
-        "confidence": mitre.get("confidence"),
+        "confidence": mitre.get("confidence", 0.0),
         "tactic_confidence": mitre.get("tactic_confidence"),
         "technique_confidence": mitre.get("technique_confidence"),
         "source": "catboost",

@@ -234,20 +234,17 @@ def run_correlation_with_ai():
     if not summary:
         return jsonify({"error": "summary is required"}), 400
 
-    # Init GPT engine
-    gpt_engine = GPTCorrelationEngine()
-
     try:
-        # Run GPT only on this summary
+        gpt_engine = _init_gpt_engine()   # ✅ DÙNG HÀM ĐÚNG
         ai_result = gpt_engine.correlate_window(summary)
+
+        return jsonify({
+            "status": "ok",
+            "analysis": ai_result
+        })
 
     except Exception as e:
         return jsonify({
             "error": "GPT correlation failed",
             "detail": str(e)
         }), 500
-
-    return jsonify({
-        "status": "ok",
-        "analysis": ai_result
-    })

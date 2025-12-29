@@ -6,6 +6,7 @@ Phục vụ AI correlation & phát hiện Lateral Movement
 """
 
 from typing import Dict, Any, Optional, Tuple
+from datetime import datetime, timezone   # ✅ FIX: thiếu import gây NameError
 
 
 # =========================
@@ -106,15 +107,29 @@ def normalize_snort_event(log: Dict[str, Any]) -> Dict[str, Any]:
     snort = log.get("snort", {})
 
     # ===== ID (QUAN TRỌNG NHẤT) =====
+    # ✅ FIX: elastic_id luôn lấy từ log, không dùng biến chưa định nghĩa
     elastic_id = log.get("_id") or log.get("elastic_id")
 
+    # ===== Parse IP / Port (GIỮ NGUYÊN) =====
     src_ip, src_port = parse_ap(snort.get("src_ap"))
     dst_ip, dst_port = parse_ap(snort.get("dst_ap"))
 
+    # ===== Rule parsing (GIỮ NGUYÊN) =====
     rule_info = parse_rule_id(snort.get("rule"))
 
+    # ===== Behavior inference (GIỮ NGUYÊN) =====
     behavior = infer_behavior(snort, dst_port)
     lateral_candidate = is_lateral_candidate(src_ip, dst_ip, dst_port)
+
+    # ===== Timestamp handling =====
+    # ✅ FIX: parse @timestamp → datetime UTC (tránh string gây lỗi realtime)
+    raw_ts = log.get("@timestamp")
+    try:
+        timestamp = datetime.fromisoformat(
+            raw_ts.replace("Z", "+00:00")
+        ).astimezone(timezone.utc)
+    except Exception:
+        timestamp = datetime.now(timezone.utc)
 
     event = {
         # ===== Identity =====
@@ -122,7 +137,8 @@ def normalize_snort_event(log: Dict[str, Any]) -> Dict[str, Any]:
         "source_product": "snort3",
 
         # ===== Time =====
-        "timestamp": log.get("@timestamp"),
+        # ✅ GIỮ NGUYÊN FIELD NAME "timestamp"
+        "timestamp": timestamp,
 
         # ===== Sensor =====
         "sensor_id": log.get("source") or log.get("host", {}).get("name"),

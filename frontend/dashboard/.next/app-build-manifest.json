@@ -35,6 +35,21 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/rule/page.js"
+    ],
+    "/sensor/layout": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/sensor/layout.js"
+    ],
+    "/sensor/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/sensor/page.js"
+    ],
+    "/api/elastic/logs/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/elastic/logs/route.js"
     ]
   }
 }

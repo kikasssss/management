@@ -49,4 +49,9 @@ if __name__ == "__main__":
     start_background_services()
     Thread(target=background_data_updater, daemon=True).start()
     print("[Scheduler] Background updater started")
-    app.run(host="0.0.0.0", port=5000)
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=False,
+        use_reloader=False
+    )

@@ -6,8 +6,7 @@ thành attack window phục vụ correlation
 """
 
 from typing import List, Dict, Any
-from datetime import datetime, timedelta
-
+from datetime import datetime, timedelta, timezone
 
 DEFAULT_WINDOW_SECONDS = 300
 
@@ -29,20 +28,29 @@ def parse_ts(ts: str) -> datetime:
 
 def build_attack_windows(
     events: List[Dict[str, Any]],
-    window_seconds: int = DEFAULT_WINDOW_SECONDS
+    window_seconds: int = DEFAULT_WINDOW_SECONDS,
+    allow_open_window: bool = True
 ) -> List[Dict[str, Any]]:
 
     if not events:
         return []
 
-    # sort theo thời gian
-    events = sorted(events, key=lambda e: e.get("timestamp"))
+    # sort theo timestamp (GIỮ NGUYÊN)
+    events = sorted(events, key=lambda e: e["timestamp"])
 
     windows = []
     current = None
 
+    # now luôn là UTC-aware
+    now = datetime.now(timezone.utc)
+
     for event in events:
-        ts = parse_ts(event["timestamp"])
+        ts = event["timestamp"]
+
+        # === FIX: đảm bảo ts là timezone-aware ===
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+
         actor_ip = event["actor"]["ip"]
         target_ip = event["target"]["ip"]
 
@@ -53,21 +61,27 @@ def build_attack_windows(
                 "actor_ip": actor_ip,
                 "target_ip": target_ip,
 
-                # aggregation fields
+                # aggregation fields (GIỮ NGUYÊN)
                 "events": [event],
                 "behaviors": [event.get("behavior")],
                 "sensors": set([event.get("sensor_id")]),
-
-                # MITRE aggregation (GIỮ NGUYÊN event-level)
                 "mitre_events": [
                     event.get("mitre")
                 ] if event.get("mitre") else [],
+
+                # realtime flag
+                "status": "open",
             }
             continue
 
+        # === FIX: normalize timezone window_end ===
+        window_end = current["window_end"]
+        if window_end.tzinfo is None:
+            window_end = window_end.replace(tzinfo=timezone.utc)
+
         same_actor = actor_ip == current["actor_ip"]
         same_target = target_ip == current["target_ip"]
-        within_time = (ts - current["window_end"]).total_seconds() <= window_seconds
+        within_time = (ts - window_end).total_seconds() <= window_seconds
 
         if same_actor and same_target and within_time:
             current["window_end"] = ts
@@ -82,6 +96,7 @@ def build_attack_windows(
             # đóng window cũ
             current["sensors"] = list(current["sensors"])
             current["event_count"] = len(current["events"])
+            current["status"] = "closed"
             windows.append(current)
 
             # mở window mới
@@ -96,15 +111,32 @@ def build_attack_windows(
                 "mitre_events": [
                     event.get("mitre")
                 ] if event.get("mitre") else [],
+                "status": "open",
             }
 
-    # đóng window cuối
+    # =========================
+    # xử lý window cuối (ĐOẠN BẠN HỎI)
+    # =========================
     if current:
+        window_end = current["window_end"]
+
+        # === FIX: normalize timezone ===
+        if window_end.tzinfo is None:
+            window_end = window_end.replace(tzinfo=timezone.utc)
+
+        age = (now - window_end).total_seconds()
+
         current["sensors"] = list(current["sensors"])
         current["event_count"] = len(current["events"])
-        windows.append(current)
 
-    # format timestamp
+        if age >= window_seconds:
+            current["status"] = "closed"
+            windows.append(current)
+        elif allow_open_window:
+            current["status"] = "open"
+            windows.append(current)
+
+    # format timestamp output (GIỮ NGUYÊN)
     for w in windows:
         w["window_start"] = w["window_start"].isoformat()
         w["window_end"] = w["window_end"].isoformat()

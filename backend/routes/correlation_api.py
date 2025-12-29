@@ -9,7 +9,7 @@ from pymongo import MongoClient, DESCENDING
 from bson import ObjectId
 import os
 import config
-
+from datetime import datetime, timedelta, timezone
 from services.correlation_service import run_correlation_pipeline
 from AI_MITRE.AI.clients.openai_responses_client import OpenAIResponsesClient
 from AI_MITRE.AI.engines.gpt_correlation_engine import GPTCorrelationEngine
@@ -179,25 +179,23 @@ def get_incident_detail(incident_id):
 def run_correlation_from_mongo():
     payload = request.get_json(force=True, silent=True) or {}
 
-    since_minutes = int(payload.get("since_minutes", 10))
+    since_minutes = int(payload.get("since_minutes", 5))
     limit = int(payload.get("limit", 2000))
 
-    from datetime import datetime, timedelta, timezone
-
-    since_ts = (
-        datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
-    ).isoformat()
+    since_ts = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
 
     db = _get_db()
     events_col = db[config.MONGO_COL_NORMALIZED]
 
     cursor = (
         events_col
-        .find({"timestamp": {"$gte": since_ts}}, {"_id": 0})
+        .find(
+            {"timestamp": {"$gte": since_ts}},
+            {"_id": 0}
+        )
         .sort("timestamp", 1)
         .limit(limit)
     )
-
     events = list(cursor)
 
     if not events:

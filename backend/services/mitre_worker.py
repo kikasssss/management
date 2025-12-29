@@ -101,15 +101,36 @@ def run_forever():
                     features = normalize_elastic_log(hit)
                     mitre_result = engine.process_log(features)
 
+                    # ===== TÁCH processed vs mapped =====
                     if mitre_result:
-                        save_mitre_result(meta, mitre_result)
+                        mitre_doc = {
+                            "mitre_processed": True,
+                            "mitre_mapped": True,
+                            "tactic": mitre_result.get("tactic"),
+                            "technique": mitre_result.get("technique"),
+                            "confidence": mitre_result.get("confidence", 0),
+                            "tactic_confidence": mitre_result.get("tactic_confidence", 0),
+                            "technique_confidence": mitre_result.get("technique_confidence", 0),
+                        }
+                    else:
+                        # 🔥 LOG BENIGN / KHÔNG MAP
+                        mitre_doc = {
+                            "mitre_processed": True,
+                            "mitre_mapped": False,
+                            "tactic": None,
+                            "technique": None,
+                            "confidence": 0,
+                            "tactic_confidence": 0,
+                            "technique_confidence": 0,
+                        }
+
+                    save_mitre_result(meta, mitre_doc)
 
                 except Exception as e:
-                    # 1 event lỗi không được làm kẹt pipeline
                     print("[MITRE][EVENT ERROR]", e)
 
                 finally:
-                    # 🔥 OFFSET MUST ALWAYS ADVANCE IF WE'VE READ THIS HIT
+                    # OFFSET LUÔN PHẢI ĐI
                     if sort_key:
                         set_mitre_offset(sort_key)
 

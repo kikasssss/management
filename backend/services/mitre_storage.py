@@ -31,6 +31,8 @@ def save_mitre_result(meta: dict, mitre_result: dict):
         "msg": meta.get("msg"),
 
         # ===== MITRE =====
+        "mitre_processed": mitre_result.get("mitre_processed", True),
+        "mitre_mapped": mitre_result.get("mitre_mapped", False),
         "tactic": mitre_result.get("tactic"),
         "technique": mitre_result.get("technique"),
         "confidence": mitre_result.get("confidence"),

@@ -7,16 +7,16 @@ import config
 from AI_MITRE.Catboost.preprocessing.normalize_elastic import normalize_elastic_log
 from AI_MITRE.Catboost.inference.engine import MitreEngine
 from services.mitre_storage import save_mitre_result
-
-
+from services.pipeline_offset import set_mitre_offset
+import warnings
+from elasticsearch import ElasticsearchWarning
 # =========================
 # CONFIG
 # =========================
 ELASTIC_URL = "http://localhost:9200"
 ELASTIC_INDEX = "snort-alert-*"
 BATCH_SIZE = 200
-POLL_INTERVAL = 10  # seconds
-
+POLL_INTERVAL = 1  # seconds
 
 # =========================
 # INIT
@@ -25,6 +25,10 @@ es = Elasticsearch(ELASTIC_URL)
 engine = MitreEngine()
 
 
+warnings.filterwarnings(
+    "ignore",
+    category=ElasticsearchWarning
+)
 # =========================
 # METADATA EXTRACTOR
 # =========================
@@ -50,7 +54,7 @@ def extract_metadata(hit: dict) -> dict:
     dst_ip, dst_port = split_ip_port(snort.get("dst_ap"))
 
     return {
-        # 🔗 LIÊN KẾT ELASTIC (MỚI THÊM)
+        # 🔗 LINK ELASTIC
         "elastic_index": hit.get("_index"),
         "elastic_id": hit.get("_id"),
 
@@ -76,41 +80,40 @@ def extract_metadata(hit: dict) -> dict:
         "class": snort.get("class"),
     }
 
-
 # =========================
 # FETCH LOGS FROM ELASTIC
 # =========================
-def fetch_logs(last_ts=None):
+def fetch_logs(search_after=None):
+    """
+    FIX QUAN TRỌNG:
+    - KHÔNG dùng _shard_doc (vì không có PIT)
+    - Dùng @timestamp + _id để search_after an toàn
+    """
     query = {
         "size": BATCH_SIZE,
-        "sort": [{"@timestamp": "asc"}],
-        "query": {
-            "bool": {
-                "filter": []
-            }
-        }
+        "sort": [
+            {"@timestamp": "asc"},
+            {"_id": "asc"}          # 🔥 FIX: thay _shard_doc
+        ],
+        "query": {"match_all": {}}
     }
 
-    if last_ts:
-        query["query"]["bool"]["filter"].append(
-            {"range": {"@timestamp": {"gt": last_ts}}}
-        )
+    if search_after:
+        query["search_after"] = search_after
 
     resp = es.search(index=ELASTIC_INDEX, body=query)
     return resp["hits"]["hits"]
-
 
 # =========================
 # MAIN LOOP
 # =========================
 def run_forever():
     print("[MITRE] Worker started")
-    last_ts = None
+    search_after = None
 
     while True:
         try:
-            hits = fetch_logs(last_ts)
-
+            hits = fetch_logs(search_after)
             if not hits:
                 time.sleep(POLL_INTERVAL)
                 continue
@@ -118,30 +121,28 @@ def run_forever():
             print(f"[MITRE] Got {len(hits)} logs")
 
             for hit in hits:
-                src = hit.get("_source", {})
-                last_ts = src.get("@timestamp")
+                try:
+                    meta = extract_metadata(hit)
+                    features = normalize_elastic_log(hit)
+                    mitre_result = engine.process_log(features)
 
-                # 1️⃣ extract metadata (CHO MONGO + LINK ELASTIC)
-                meta = extract_metadata(hit)
+                    if mitre_result:
+                        save_mitre_result(meta, mitre_result)
 
-                # 2️⃣ normalize (CHO AI)
-                features = normalize_elastic_log(hit)
+                except Exception as e:
+                    # Lỗi 1 event thì bỏ qua event đó
+                    print("[MITRE][EVENT ERROR]", e)
 
-                # 3️⃣ MITRE mapping
-                mitre_result = engine.process_log(features)
+            # ✅ cập nhật checkpoint + offset theo sort cuối cùng
+            search_after = hits[-1]["sort"]
+            set_mitre_offset(search_after)
 
-                if mitre_result:
-                    save_mitre_result(meta, mitre_result)
-
-            time.sleep(POLL_INTERVAL)
+            # nghỉ nhẹ để tránh CPU 100%
+            time.sleep(0.05)
 
         except Exception as e:
             print("[MITRE][ERROR]", e)
             time.sleep(POLL_INTERVAL)
 
-
-# =========================
-# ENTRYPOINT FOR app.py
-# =========================
 def start_worker():
     run_forever()

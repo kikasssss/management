@@ -22,7 +22,7 @@ from pymongo.collection import Collection
 import config
 from AI_MITRE.AI.schema.snort_event_normalizer import normalize_snort_event
 
-
+from services.pipeline_offset import get_mitre_offset
 # =========================
 # CONFIG
 # =========================
@@ -33,7 +33,16 @@ POLL_INTERVAL = 2
 CHECKPOINT_FILE = "data/snort_normalize_checkpoint.json"
 PIT_KEEP_ALIVE = "2m"
 
-
+def sort_leq(a: list, b: list) -> bool:
+    """
+    So sánh lexicographic cho [timestamp(str), shard_doc(int)].
+    ISO timestamp so theo string là đúng thứ tự thời gian.
+    """
+    if a is None or b is None:
+        return False
+    if a[0] != b[0]:
+        return a[0] <= b[0]
+    return a[1] <= b[1]
 # =========================
 # TIME
 # =========================
@@ -175,7 +184,6 @@ def upsert_events(col: Collection, events: List[Dict[str, Any]]):
 # =========================
 # WORKER LOOP
 # =========================
-
 def run():
     print("[*] Starting Snort Normalize Worker (PIT)")
 
@@ -191,6 +199,12 @@ def run():
 
         while True:
             try:
+                offset_sort = get_mitre_offset()
+                if not offset_sort:
+                    # MITRE chưa chạy/ chưa set offset
+                    time.sleep(POLL_INTERVAL)
+                    continue
+
                 query = build_es_query(pit_id, search_after)
                 res = es.search(body=query)
 
@@ -199,38 +213,48 @@ def run():
                     time.sleep(POLL_INTERVAL)
                     continue
 
+                # ✅ chỉ lấy các hit <= offset_sort
+                allowed = []
+                for h in hits:
+                    hs = h.get("sort")
+                    if hs and sort_leq(hs, offset_sort):
+                        allowed.append(h)
+                    else:
+                        break  # vì hits đã sort asc, vượt offset thì dừng luôn
+
+                if not allowed:
+                    # batch này toàn log mới hơn offset => chờ MITRE tiến lên
+                    time.sleep(POLL_INTERVAL)
+                    continue
+
                 events = []
-                for hit in hits:
+                for hit in allowed:
                     ev = normalize_hit(hit)
                     if ev:
                         events.append(ev)
 
                 upsert_events(col, events)
 
-                search_after = hits[-1]["sort"]
+                # ✅ chỉ advance checkpoint tới cái cuối cùng đã xử lý (<= offset)
+                search_after = allowed[-1]["sort"]
                 save_checkpoint(search_after)
 
                 print(
                     f"[+] fetched={len(hits)} "
+                    f"allowed={len(allowed)} "
                     f"normalized={len(events)} "
-                    f"search_after={search_after}"
+                    f"search_after={search_after} "
+                    f"mitre_offset={offset_sort}"
                 )
 
-                time.sleep(0.1)
+                time.sleep(0.05)
 
             except Exception as e:
                 print("[!] Worker inner error:", e)
                 traceback.print_exc()
                 time.sleep(POLL_INTERVAL)
 
-    except KeyboardInterrupt:
-        print("\n[!] Worker stopped by user")
-
     finally:
         if pit_id:
             close_pit(es, pit_id)
             print("[*] PIT closed")
-
-
-if __name__ == "__main__":
-    run()

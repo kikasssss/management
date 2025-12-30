@@ -195,3 +195,23 @@ export interface GPTAnalysisResponse {
   status: "ok";
   analysis: GPTAnalysisResult;
 }
+/* ---------- Lateral Correlation ---------- */
+export interface LateralSession {
+  target_ip: string;
+  primary_behavior: string;
+  message_frequency: Record<string, number>;
+}
+
+export interface LateralContext {
+  actor_ip: string;
+  targets: string[];
+  sessions: LateralSession[];
+}
+
+export interface LateralRunResponse {
+  status: "ok";
+  since_minutes: number;
+  input_window_count: number;
+  lateral_count: number;
+  lateral_contexts: LateralContext[];
+}

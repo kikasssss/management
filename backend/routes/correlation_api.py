@@ -106,6 +106,32 @@ def _run_from_mongo_internal(*, since_minutes: int, limit: int):
         "results": results,
     }
 
+def _map_lateral_status(ai_analysis: dict) -> str:
+    """
+    Map GPT lateral analysis to a UI-friendly status.
+    """
+
+    if ai_analysis.get("lateral_movement", {}).get("detected"):
+        return "confirmed"
+
+    # No lateral detected → check evidence
+    top_findings = " ".join(
+        ai_analysis.get("top_findings", [])
+    ).lower()
+
+    # crude but effective heuristics
+    exploit_keywords = [
+        "exploit",
+        "shellcode",
+        "overflow",
+        "malformed payload",
+    ]
+
+    for kw in exploit_keywords:
+        if kw in top_findings:
+            return "attempted"
+
+    return "not_detected"
 
 # ======================================================
 # POST /api/v1/correlation/run
@@ -322,10 +348,14 @@ def run_lateral_with_ai():
         # not GPTCorrelationEngine (window-level)
         ai_result = gpt_engine.correlate_lateral_context(lateral_context)
 
+        lateral_status = _map_lateral_status(ai_result)
+
         return jsonify({
             "status": "ok",
-            "analysis": ai_result
+            "analysis": ai_result,
+            "lateral_status": lateral_status
         })
+
 
     except Exception as e:
         return jsonify({

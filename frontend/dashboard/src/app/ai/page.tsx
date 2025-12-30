@@ -6,7 +6,7 @@ import MitreSummaryPanel from "@/components/ai/MitreSummaryPanel";
 import AttackChainView from "@/components/ai/AttackChainView";
 import type { MitreLog } from "@/types/types";
 import CorrelationPanel from "@/components/ai/CorrelationPanel";
-
+import LateralCorrelationPanel from "@/components/ai/LateralCorrelationPanel";
 export default function AIPage() {
   const [logs, setLogs] = useState<MitreLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,6 +70,7 @@ export default function AIPage() {
       {/* 👉 Summary TỰ QUẢN LÝ DATE */}
       <MitreSummaryPanel sensorId={selectedSensor} />
       <CorrelationPanel />
+      <LateralCorrelationPanel />
       <AttackChainView chains={[]} />
     </div>
   );

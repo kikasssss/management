@@ -14,13 +14,14 @@ from services.correlation_service import run_correlation_pipeline
 from AI_MITRE.AI.clients.openai_responses_client import OpenAIResponsesClient
 from AI_MITRE.AI.engines.gpt_correlation_engine import GPTCorrelationEngine
 from services.correlation_service import run_correlation_pipeline
-
+from AI_MITRE.AI.engines.lateral_correlation_engine import LateralCorrelationEngine
+from AI_MITRE.AI.engines.gpt_lateral_engine import GPTLateralCorrelationEngine
 correlation_bp = Blueprint(
     "correlation",
     __name__,
     url_prefix="/api/v1/correlation"
 )
-
+lateral_engine = LateralCorrelationEngine()
 
 # ======================================================
 # Helpers
@@ -46,6 +47,64 @@ def _init_gpt_engine():
         model="gpt-5-mini-2025-08-07",
     )
     return GPTCorrelationEngine(client)
+
+def _init_lateral_gpt_engine():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY not set")
+
+    client = OpenAIResponsesClient(
+        api_key=api_key,
+        model="gpt-5-mini-2025-08-07",
+    )
+    return GPTLateralCorrelationEngine(client)
+
+def _run_from_mongo_internal(*, since_minutes: int, limit: int):
+    since_ts = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
+
+    db = _get_db()
+    events_col = db[config.MONGO_COL_NORMALIZED]
+
+    cursor = (
+        events_col
+        .find(
+            {"timestamp": {"$gte": since_ts}},
+            {"_id": 0}
+        )
+        .sort("timestamp", 1)
+        .limit(limit)
+    )
+
+    events = list(cursor)
+
+    if not events:
+        return {
+            "status": "ok",
+            "event_count": 0,
+            "window_count": 0,
+            "results": []
+        }
+
+    valid_events = [
+        ev for ev in events
+        if ev.get("timestamp")
+        and ev.get("actor", {}).get("ip")
+        and ev.get("target", {}).get("ip")
+    ]
+
+    results = run_correlation_pipeline(
+        events=valid_events,
+        correlation_collection=None,
+        enable_ai=False,
+        gpt_engine=None,
+    )
+
+    return {
+        "status": "ok",
+        "event_count": len(valid_events),
+        "window_count": len(results),
+        "results": results,
+    }
 
 
 # ======================================================
@@ -182,50 +241,13 @@ def run_correlation_from_mongo():
     since_minutes = int(payload.get("since_minutes", 5))
     limit = int(payload.get("limit", 2000))
 
-    since_ts = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
-
-    db = _get_db()
-    events_col = db[config.MONGO_COL_NORMALIZED]
-
-    cursor = (
-        events_col
-        .find(
-            {"timestamp": {"$gte": since_ts}},
-            {"_id": 0}
-        )
-        .sort("timestamp", 1)
-        .limit(limit)
-    )
-    events = list(cursor)
-
-    if not events:
-        return jsonify({
-            "status": "ok",
-            "window_count": 0,
-            "results": []
-        })
-
-    # Minimal validation only
-    valid_events = [
-        ev for ev in events
-        if ev.get("timestamp")
-        and ev.get("actor", {}).get("ip")
-        and ev.get("target", {}).get("ip")
-    ]
-
-    results = run_correlation_pipeline(
-        events=valid_events,
-        correlation_collection=None,
-        enable_ai=False,
-        gpt_engine=None,
+    result = _run_from_mongo_internal(
+        since_minutes=since_minutes,
+        limit=limit,
     )
 
-    return jsonify({
-        "status": "ok",
-        "event_count": len(valid_events),
-        "window_count": len(results),
-        "results": results,
-    })
+    return jsonify(result)
+
 @correlation_bp.route("/run_with_ai", methods=["POST"])
 def run_correlation_with_ai():
     payload = request.get_json(force=True, silent=True) or {}
@@ -246,5 +268,67 @@ def run_correlation_with_ai():
     except Exception as e:
         return jsonify({
             "error": "GPT correlation failed",
+            "detail": str(e)
+        }), 500
+
+
+@correlation_bp.route("/run_lateral_from_mongo", methods=["POST"])
+def run_lateral_from_mongo():
+    payload = request.get_json(silent=True) or {}
+
+    since_minutes = int(payload.get("since_minutes", 10))
+    limit = int(payload.get("limit", 500))
+
+    base_result = _run_from_mongo_internal(
+        since_minutes=since_minutes,
+        limit=limit,
+    )
+
+    results = base_result.get("results", [])
+
+    lateral_contexts = lateral_engine.build_lateral_context(results)
+
+    return jsonify({
+        "status": "ok",
+        "since_minutes": since_minutes,
+        "input_window_count": base_result.get("window_count", 0),
+        "lateral_count": len(lateral_contexts),
+        "lateral_contexts": lateral_contexts,
+    })
+
+
+
+@correlation_bp.route("/run_lateral_with_ai", methods=["POST"])
+def run_lateral_with_ai():
+    """
+    Run GPT reasoning on a single lateral_context.
+    This API is intentionally separated to control cost.
+    """
+
+    payload = request.get_json(force=True, silent=True) or {}
+
+    lateral_context = payload.get("lateral_context")
+    if not lateral_context:
+        return jsonify({
+            "error": "lateral_context is required"
+        }), 400
+
+    try:
+        # Init GPT engine (reuse existing pattern)
+        gpt_engine = _init_lateral_gpt_engine()
+
+        # IMPORTANT:
+        # gpt_engine here MUST be GPTLateralCorrelationEngine
+        # not GPTCorrelationEngine (window-level)
+        ai_result = gpt_engine.correlate_lateral_context(lateral_context)
+
+        return jsonify({
+            "status": "ok",
+            "analysis": ai_result
+        })
+
+    except Exception as e:
+        return jsonify({
+            "error": "GPT lateral correlation failed",
             "detail": str(e)
         }), 500

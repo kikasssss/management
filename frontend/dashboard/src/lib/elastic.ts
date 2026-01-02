@@ -82,6 +82,26 @@ export class ElasticClient {
 
     return (await res.json()) as { result: string; _id: string };
   }
+  // ---------- RAW SEARCH (for aggregation, metrics) ----------
+  async rawSearch(
+    index: string,
+    queryBody: Record<string, unknown>
+  ): Promise<any> {
+    const url = `${this.baseURL}/${index}/_search`;
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: this.getHeaders(),
+      body: JSON.stringify(queryBody),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Elastic Raw Search Error: ${err}`);
+    }
+
+    return res.json();
+  }
 }
 
 export const elastic = new ElasticClient();

@@ -14,7 +14,7 @@ export default function SensorPage() {
 */}
 
       {/* Detailed Table */}
-      <SensorTable sensors={sensors} />
+      {/*<SensorTable sensors={sensors} />*/}
 
       <div className="mt-8">
         <SensorLogViewer />

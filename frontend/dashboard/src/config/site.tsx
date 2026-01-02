@@ -8,8 +8,8 @@ export type Navigation = {
 };
 
 export const siteConfig = {
-  title: "VisActor Next Template",
-  description: "Template for VisActor and Next.js",
+  title: "ThreatScope",
+  description: "Intelligent Security Monitoring System",
 };
 
 export const navigations: Navigation[] = [

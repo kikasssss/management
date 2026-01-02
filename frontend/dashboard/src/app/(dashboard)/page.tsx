@@ -19,14 +19,7 @@ export default function Home() {
           <LogClassificastionOverview />
         </Container>
       </div>
-      <div className="grid grid-cols-1 divide-y border-b border-border laptop:grid-cols-2 laptop:divide-x laptop:divide-y-0 laptop:divide-border">
-        <Container className="py-4 laptop:col-span-1">
-          <ThreatIntelIOC />
-        </Container>
-        <Container className="py-4 laptop:col-span-1">
-          <AiLogClassificationOptions />
-        </Container>
-      </div>
+
     </div>
   );
 }

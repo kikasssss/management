@@ -1,38 +1,38 @@
-import { addDays, endOfDay, isWithinInterval, startOfDay } from "date-fns";
+"use client";
+
 import { atom } from "jotai";
 import type { DateRange } from "react-day-picker";
-import { sensorLogs } from "@/data/dashboard/average-log-sensor";
+import { addDays } from "date-fns";
 import type { SensorMetric } from "@/types/types";
 
-const defaultStartDate = new Date(2023, 11, 18);
+/* ---------------- Date range ---------------- */
+
+const defaultStartDate = new Date();
 
 export const dateRangeAtom = atom<DateRange | undefined>({
-  from: defaultStartDate,
-  to: addDays(defaultStartDate, 6),
+  from: addDays(defaultStartDate, -1),
+  to: defaultStartDate,
 });
 
-export const sensorChartDataAtom = atom((get) => {
-  const dateRange = get(dateRangeAtom);
+/* ---------------- Fetch data atom ---------------- */
 
-  if (!dateRange?.from || !dateRange?.to) return [];
+export const sensorChartDataAtom = atom<Promise<SensorMetric[]>>(async (get) => {
+  const range = get(dateRangeAtom);
+  if (!range?.from || !range?.to) return [];
 
-  const startDate = startOfDay(dateRange.from);
-  const endDate = endOfDay(dateRange.to);
+  const from = range.from.toISOString();
+  const to = range.to.toISOString();
 
-  return sensorLogs
-    .filter((item) => {
-      const [year, month, day] = item.date.split("-").map(Number);
-      const date = new Date(year, month - 1, day);
-      return isWithinInterval(date, { start: startDate, end: endDate });
-    })
-    .flatMap((item) => {
-      const res: SensorMetric[] = [
-        {
-          date: item.date,
-          type: item.sensor,
-          value: item.alerts,
-        },
-      ];
-      return res;
-    });
+  const res = await fetch(
+    `/api/elastic/avg/?from=${from}&to=${to}`,
+    { cache: "no-store" },
+  );
+
+  if (!res.ok) {
+    console.error("Failed to fetch sensor chart data");
+    return [];
+  }
+
+  const json = await res.json();
+  return json.data as SensorMetric[];
 });

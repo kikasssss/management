@@ -24,7 +24,7 @@ function Indicator() {
           logClassificationOverview.reduce((acc, curr) => acc + curr.value, 0),
         )}
       </span>
-      <span className="text-muted-foreground/60">Sales</span>
+      <span className="text-muted-foreground/60">Logs</span>
     </div>
   );
 }

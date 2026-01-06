@@ -1,6 +1,6 @@
 "use client";
 
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { useAtom } from "jotai";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { sensorLogs } from "@/data/dashboard/average-log-sensor";
+
 import { dateRangeAtom } from "@/lib/atoms";
 import { cn } from "@/lib/utils";
 
@@ -19,21 +19,12 @@ export function DatePickerWithRange({
 }: React.HTMLAttributes<HTMLDivElement>) {
   const [dateRange, setDateRange] = useAtom(dateRangeAtom);
 
-  const firstAvailableDate = sensorLogs.reduce(
-    (minDate, current) => {
-      const currentDate = parseISO(current.date);
-      return currentDate < minDate ? currentDate : minDate;
-    },
-    parseISO(sensorLogs[0].date),
-  );
+  // 🔥 ngày log gần nhất = hôm nay
+  const today = new Date();
 
-  const lastAvailableDate = sensorLogs.reduce(
-    (maxDate, current) => {
-      const currentDate = parseISO(current.date);
-      return currentDate > maxDate ? currentDate : maxDate;
-    },
-    parseISO(sensorLogs[sensorLogs.length - 1].date),
-  );
+  // (tuỳ chọn) giới hạn quá khứ, ví dụ 30 ngày
+  const firstAvailableDate = new Date();
+  firstAvailableDate.setDate(today.getDate() - 30);
 
   return (
     <div className={cn("grid gap-2", className)}>
@@ -41,13 +32,13 @@ export function DatePickerWithRange({
         <PopoverTrigger asChild>
           <Button
             id="date"
-            variant={"outline"}
+            variant="outline"
             className={cn(
               "w-[276px] justify-start text-left font-normal",
               !dateRange && "text-muted-foreground",
             )}
           >
-            <CalendarIcon />
+            <CalendarIcon className="mr-2 h-4 w-4" />
             {dateRange?.from ? (
               dateRange.to ? (
                 <>
@@ -62,16 +53,17 @@ export function DatePickerWithRange({
             )}
           </Button>
         </PopoverTrigger>
+
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar
             initialFocus
             mode="range"
-            defaultMonth={dateRange?.from}
+            defaultMonth={dateRange?.from ?? today}
             selected={dateRange}
             onSelect={setDateRange}
             numberOfMonths={2}
             fromDate={firstAvailableDate}
-            toDate={lastAvailableDate}
+            toDate={today}   // 🔥 không cho chọn tương lai
           />
         </PopoverContent>
       </Popover>

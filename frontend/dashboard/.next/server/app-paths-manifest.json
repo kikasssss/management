@@ -1,8 +1,6 @@
 {
-  "/api/elastic/avg/route": "app/api/elastic/avg/route.js",
-  "/api/elastic/metric/route": "app/api/elastic/metric/route.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/api/elastic/logs/route": "app/api/elastic/logs/route.js",
   "/(dashboard)/page": "app/(dashboard)/page.js",
-  "/sensor/page": "app/sensor/page.js",
-  "/rule/page": "app/rule/page.js",
-  "/ai/page": "app/ai/page.js"
+  "/sensor/page": "app/sensor/page.js"
 }

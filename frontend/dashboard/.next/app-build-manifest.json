@@ -16,6 +16,11 @@
       "static/chunks/main-app.js",
       "static/chunks/app/(dashboard)/page.js"
     ],
+    "/api/elastic/avg/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/elastic/avg/route.js"
+    ],
     "/sensor/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
@@ -26,40 +31,15 @@
       "static/chunks/main-app.js",
       "static/chunks/app/sensor/page.js"
     ],
-    "/ai/layout": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/ai/layout.js"
-    ],
-    "/ai/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/ai/page.js"
-    ],
-    "/api/elastic/logs/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/elastic/logs/route.js"
-    ],
-    "/rule/layout": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/rule/layout.js"
-    ],
-    "/rule/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/rule/page.js"
-    ],
     "/api/elastic/metric/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/api/elastic/metric/route.js"
     ],
-    "/api/elastic/avg/route": [
+    "/api/elastic/logs/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/elastic/avg/route.js"
+      "static/chunks/app/api/elastic/logs/route.js"
     ]
   }
 }

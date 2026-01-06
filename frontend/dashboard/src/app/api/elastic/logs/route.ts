@@ -5,7 +5,6 @@ import type {
   ApiRequestBody,
 } from "@/types/elastic";
 
-
 /* -------- API HANDLER -------- */
 
 export async function POST(req: Request): Promise<Response> {
@@ -43,8 +42,8 @@ export async function POST(req: Request): Promise<Response> {
       id: item._id,
       sort: item.sort,
 
+      /* ✅ CHỈ DÙNG @timestamp */
       timestamp: item._source["@timestamp"],
-      snort_timestamp: s.timestamp ?? null,
 
       traffic: {
         src_ip: s.src_ap?.split(":")[0] ?? null,

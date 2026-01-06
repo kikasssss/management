@@ -1,10 +1,13 @@
 import type { SensorMetric } from "@/types/types";
 
+const BASE_URL =
+  process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
 export async function fetchSensorChartData(
   start?: string,
   end?: string
 ): Promise<SensorMetric[]> {
-  const res = await fetch("/api/elastic/avg", {
+  const res = await fetch(`${BASE_URL}/api/elastic/avg`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ start, end }),
@@ -12,7 +15,8 @@ export async function fetchSensorChartData(
   });
 
   if (!res.ok) {
-    throw new Error("Failed to fetch sensor chart data");
+    const err = await res.text();
+    throw new Error(err);
   }
 
   const json = await res.json();

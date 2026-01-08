@@ -21,25 +21,10 @@
       "static/chunks/main-app.js",
       "static/chunks/app/api/elastic/avg/route.js"
     ],
-    "/sensor/layout": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/sensor/layout.js"
-    ],
-    "/sensor/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/sensor/page.js"
-    ],
     "/api/elastic/metric/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/api/elastic/metric/route.js"
-    ],
-    "/api/elastic/logs/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/elastic/logs/route.js"
     ]
   }
 }
